@@ -5,6 +5,7 @@ use serde::{
     de::{self, EnumAccess, VariantAccess},
     Deserialize,
 };
+use regex::Regex;
 
 use crate::config::Key;
 
@@ -32,13 +33,17 @@ impl<'de> de::Visitor<'de> for Visitor {
     }
 
     fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        let re_wait = Regex::new(r"^\d{1,3}s$").unwrap();
+
         if let Some(control) = v.strip_prefix('^') {
             Ok(Key::Control(parse_control(control)?))
         } else if let Ok(char) = v.chars().exactly_one() {
             Ok(Key::Char(char))
-        } else {
+        } else if let Some(_wait_cmd) = re_wait.captures(v) {
             let duration = duration::parse(v).map_err(E::custom)?;
             Ok(Key::Wait(duration))
+        } else {
+            Ok(Key::CharSequence(v.parse().unwrap()))
         }
     }
 
@@ -76,12 +81,14 @@ mod tests {
             "
             - t
             - ^m
+            - ^i
             - 1s
             ",
         )?;
         assert_eq!(keys[0], Key::Char('t'));
         assert_eq!(keys[1], Key::Control(ControlCode::CarriageReturn));
-        assert_eq!(keys[2], Key::Wait(Duration::from_secs(1)));
+        assert_eq!(keys[2], Key::Control(ControlCode::HorizontalTabulation));
+        assert_eq!(keys[3], Key::Wait(Duration::from_secs(1)));
         Ok(())
     }
 

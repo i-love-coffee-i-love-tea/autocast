@@ -433,6 +433,7 @@ enum Instruction {
         keys: Vec<Key>,
         #[serde(default, with = "de::duration::option")]
         type_speed: Option<Duration>,
+        dont_execute: bool,
     },
     Wait(#[serde(with = "de::duration")] Duration),
     Marker(String),
@@ -457,6 +458,7 @@ enum Key {
     Char(char),
     Control(ControlCode),
     Wait(Duration),
+    CharSequence(String)
 }
 
 impl<'de> Deserialize<'de> for Key {

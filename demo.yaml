@@ -1,71 +1,47 @@
-# demo.yaml
-# Demo for autocast
-# Also serves as another example for autocast.
-# See example.yaml and full-example.yaml for more.
-
 settings:
-  width: 105
-  height: 37
-  title: autocast v0.1.0 demo
-  environment:
-    - name: HELLO
-      value: Hello autocast!
-  timeout: 90s
+  width: 120
+  height: 60
+  title: audogombleed 1.0 demo
+#  environment:
+#    - name: HELLO
+#      value: Hello autocast!
+  timeout: 5s
 
 instructions:
   # Setup
   - !Command
-    command: cargo build --release
+    command: cp ../example.conf ~/.testcli.conf
+    hidden: true                               
+  - !Command
+    command: source ./testcli
     hidden: true
   - !Command
-    command: alias autocast=target/release/autocast
+    command: alias testcli='_cli_execute'
     hidden: true
 
-  - !Marker Introduction
-  - !Command
-    command: "# Welcome to autocast!"
-  - !Command
-    command: "# Autocast helps you automate terminal demos."
-  - !Command
-    command: "# It takes a YAML file with your instructions and generates an asciicast file for use with asciinema."
-  - !Wait 3s
-  - !Clear
+  # demo
+  - !Interactive
+    command: 'testcli '
+    dont_execute: true
+    # submit command
+    keys:
+      # <TAB><TAB>
+      - ^i
+      - ^i
+      - 2s
+      - 'var-expansion '
+      - ' '
+      # <TAB><TAB>
+      - ^i
+      - ^i
+      - 2s
+      - ^m
 
-  - !Marker Help
+  # cleanup
   - !Command
-    command: "autocast -h"
-  - !Wait 5s
-  - !Clear
-
-  - !Marker Example
-  - !Command
-    command: "# Let's see an example of how autocast works."
-  - !Command
-    command: "# This is the example input YAML file we will be using."
-  - !Command
-    command: cat example.yaml
-  - !Wait 5s
-  - !Command
-    command: "# Now let's generate the asciicast file!"
-  - !Command
-    command: autocast example.yaml example.cast
-  - !Command
-    command: "# That's it! The asciicast file can be played with asciinema."
-
-  - !Marker Play Example
-  - !Command
-    command: asciinema play example.cast
-  - !Wait 2s
-
-  - !Marker End
-  - !Command
-    command: "# Thank you for watching!"
-  - !Wait 3s
-
-  # Cleanup
-  - !Command
-    command: rm example.cast
+    command: mv ~/.testcli.conf /tmp/
     hidden: true
   - !Command
-    command: unalias autocast
+    command: rm ../autocast/testcli
     hidden: true
+

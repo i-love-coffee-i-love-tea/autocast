@@ -2,8 +2,10 @@ use std::{
     io, iter,
     time::{Duration, Instant},
 };
+use std::fmt::format;
 
 use color_eyre::eyre::Context;
+use expectrl::ControlCode;
 use indicatif::{MultiProgress, ProgressDrawTarget, ProgressIterator, ProgressStyle};
 use itertools::Itertools;
 
@@ -102,7 +104,7 @@ impl Instruction {
                 type_speed,
             } => {
                 command
-                    .send(shell_session)
+                    .send(shell_session, &false)
                     .wrap_err("could not send command to shell")?;
                 let mut output = shell_session
                     .read_until_prompt()
@@ -122,15 +124,16 @@ impl Instruction {
             }
             Self::Interactive {
                 command,
+                dont_execute,
                 keys,
                 type_speed,
             } => {
                 command
-                    .send(shell_session)
+                    .send(shell_session, dont_execute)
                     .wrap_err("could not send command to shell")?;
 
                 let type_speed = type_speed.map_or(default_type_speed, Into::into);
-                let mut output = keys_to_events(keys, type_speed, shell_session, multi_progress)?;
+                let mut output = keys_to_events(keys, type_speed, shell_session, multi_progress, prompt)?;
 
                 output.push(shell_session.new_event(String::from(prompt)));
                 let events = command
@@ -156,6 +159,7 @@ fn keys_to_events(
     type_speed: Duration,
     shell_session: &mut ShellSession,
     multi_progress: &MultiProgress,
+    prompt: &str,
 ) -> color_eyre::Result<Vec<Event>> {
     let mut keys = keys
         .iter()
@@ -167,16 +171,43 @@ fn keys_to_events(
     let mut events = Vec::new();
     let mut next = Instant::now() + type_speed;
     loop {
-        let (event, prompt) = shell_session
+        let (event, has_prompt) = shell_session
             .read()
             .wrap_err("error reading shell output")?;
-        events.extend(event);
-        if prompt {
+        if let Some(e) = event {
+            events.push(e);
+            events.push(shell_session.new_event(format!("\r\n{}testcli ", prompt)));
+        }
+        if has_prompt {
             return Ok(events);
         }
         keys.progress.tick();
         if Instant::now() >= next {
             if let Some(key) = keys.next() {
+                match key {
+                    Key::Char(character) => {
+                        let evt = shell_session.new_event(String::from(*character));
+                        events.push(evt);
+                    }
+                    Key::CharSequence(seq) => {
+                        let char_events =
+                            seq.chars().enumerate()
+                                .map(move |char| Event::output(type_speed, String::from(char.1)));
+                        events.extend(char_events);
+                    }
+                    Key::Control(ctrl) => {
+                        match ctrl {
+                            ControlCode::HorizontalTabulation => {
+                                events.push(shell_session.new_event(String::from("<TAB>")));
+                            }
+                            ControlCode::CarriageReturn => {
+                                events.push(shell_session.new_event(String::from("<ENTER>\r\n")));
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
                 key.send(shell_session).wrap_err("error sending key")?;
                 if let Key::Wait(wait) = key {
                     next += *wait;
@@ -238,15 +269,22 @@ impl<Co, Cl> Events<Co, Cl> {
 }
 
 impl Command {
-    fn send(&self, shell_session: &mut ShellSession) -> io::Result<()> {
+    fn send(&self, shell_session: &mut ShellSession, dont_execute: &bool) -> io::Result<()> {
         shell_session.reset();
         match self {
-            Self::SingleLine(line) => shell_session.send_line(line),
-            Self::MultiLine(lines) => shell_session.send_line(&lines.join(" ")),
+            Self::SingleLine(line) => {
+                if *dont_execute {
+                    shell_session.send(line)
+                } else {
+                    shell_session.send_line(line)
+                }
+            }
+            Self::MultiLine(lines) => shell_session.send(&lines.join(" ")),
             Self::Control(control) => shell_session.send(control),
         }
     }
 
+    /** creates asciicast Events for the Command */
     fn events<'a>(
         &'a self,
         type_speed: Duration,
@@ -288,7 +326,8 @@ fn type_line(
 ) -> impl Iterator<Item = Event> {
     line.into_iter()
         .map(move |char| Event::output(type_speed, String::from(char)))
-        .chain(iter::once(Event::outputln(type_speed)))
+    // TODO: should probably be done if dont_execute flag is false
+    // .chain(iter::once(Event::outputln(type_speed)))
 }
 
 #[derive(Debug, Clone)]
@@ -327,6 +366,9 @@ impl Key {
     fn send(&self, shell_session: &mut ShellSession) -> io::Result<()> {
         match self {
             Self::Char(char) => shell_session.send([*char as u8]),
+            Self::CharSequence(str) => {
+              shell_session.send(str)
+            },
             Self::Control(control) => shell_session.send(control),
             Self::Wait(_) => Ok(()),
         }
