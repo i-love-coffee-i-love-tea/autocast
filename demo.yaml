@@ -10,7 +10,7 @@ settings:
 instructions:
   # Setup
   - !Command
-    command: cp ../example.conf ~/.testcli.conf
+    command: cp ./testcli.conf ~/.testcli.conf
     hidden: true                               
   - !Command
     command: source ./testcli
@@ -40,8 +40,5 @@ instructions:
   # cleanup
   - !Command
     command: mv ~/.testcli.conf /tmp/
-    hidden: true
-  - !Command
-    command: rm ../autocast/testcli
     hidden: true
 
