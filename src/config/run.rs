@@ -125,16 +125,18 @@ impl Instruction {
                 command
                     .send(shell_session, &mut context, &false)
                     .wrap_err("could not send command to shell")?;
-                let mut output = shell_session
+                let type_speed = type_speed.unwrap_or(default_type_speed);
+                let mut output = Vec::new();
+                output.push(Event::outputln(type_speed));
+                output.extend(shell_session
                     .read_until_prompt()
-                    .wrap_err("could not read shell output")?;
+                    .wrap_err("could not read shell output")?);
 
                 if *hidden {
                     return Ok(Events::None);
                 }
 
                 output.push(shell_session.new_event(String::from(prompt)));
-                let type_speed = type_speed.unwrap_or(default_type_speed);
                 let events = command
                     .events(type_speed, secondary_prompt, line_split)
                     .chain(output);
@@ -152,8 +154,12 @@ impl Instruction {
                     .wrap_err("could not send command to shell")?;
 
                 let type_speed = type_speed.map_or(default_type_speed, Into::into);
-                let mut output = keys_to_events(keys, type_speed, shell_session, &mut context, multi_progress, prompt)?;
 
+                let mut output = Vec::new();
+                if !*raw_command {
+                    output.push(Event::outputln(type_speed));
+                }
+                output.extend(keys_to_events(keys, type_speed, shell_session, &mut context, multi_progress, prompt, raw_command)?);
                 output.push(shell_session.new_event(String::from(prompt)));
                 let events = command
                     .events(type_speed, secondary_prompt, line_split)
@@ -180,6 +186,7 @@ fn keys_to_events(
     context: &mut CommandContext,
     multi_progress: &MultiProgress,
     prompt: &str,
+    raw_command: &bool
 ) -> color_eyre::Result<Vec<Event>> {
     let mut keys = keys
         .iter()
@@ -190,45 +197,50 @@ fn keys_to_events(
 
     let mut events = Vec::new();
     let mut next = Instant::now() + type_speed;
+
     loop {
         let (event, has_prompt) = shell_session
             .read()
             .wrap_err("error reading shell output")?;
+        if let Some(e) = event {
+            events.push(e);
+            if *raw_command {
+                if events.len() > 0 && !events.last().unwrap().data.contains("<ENTER>") {
+                    events.push(shell_session.new_event(format!("\r\n{}{}", prompt, context.line)));
+                }
+            }
+        }
         if has_prompt {
             return Ok(events);
-        }
-        if let Some(e) = event {
-            if events.len() > 0 && !events.last().unwrap().data.contains("<ENTER>") {
-                events.push(e);
-                events.push(shell_session.new_event(format!("\r\n{}{}", prompt, context.line)));
-            }
         }
         keys.progress.tick();
         if Instant::now() >= next {
             if let Some(key) = keys.next() {
-                match key {
-                    Key::Char(character) => {
-                        let evt = shell_session.new_event(String::from(*character));
-                        events.push(evt);
-                    }
-                    Key::CharSequence(seq) => {
-                        let char_events =
-                            seq.chars().enumerate()
-                                .map(move |char| Event::output(type_speed, String::from(char.1)));
-                        events.extend(char_events);
-                    }
-                    Key::Control(ctrl) => {
-                        match ctrl {
-                            ControlCode::HorizontalTabulation => {
-                                events.push(shell_session.new_event(String::from("<TAB>")));
-                            }
-                            ControlCode::CarriageReturn => {
-                                events.push(shell_session.new_event(String::from("<ENTER>\r\n")));
-                            }
-                            _ => {}
+                if *raw_command {
+                    match key {
+                        Key::Char(character) => {
+                            let evt = shell_session.new_event(String::from(*character));
+                            events.push(evt);
                         }
+                        Key::CharSequence(seq) => {
+                            let char_events =
+                                seq.chars().enumerate()
+                                    .map(move |char| Event::output(type_speed, String::from(char.1)));
+                            events.extend(char_events);
+                        }
+                        Key::Control(ctrl) => {
+                            match ctrl {
+                                ControlCode::HorizontalTabulation => {
+                                    events.push(shell_session.new_event(String::from("<TAB>")));
+                                }
+                                ControlCode::CarriageReturn => {
+                                    events.push(shell_session.new_event(String::from("<ENTER>\r\n")));
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
                 key.send(shell_session, context).wrap_err("error sending key")?;
                 if let Key::Wait(wait) = key {
@@ -349,8 +361,6 @@ fn type_line(
 ) -> impl Iterator<Item = Event> {
     line.into_iter()
         .map(move |char| Event::output(type_speed, String::from(char)))
-    // TODO: should probably be done if raw_command flag is false
-    // .chain(iter::once(Event::outputln(type_speed)))
 }
 
 #[derive(Debug, Clone)]
