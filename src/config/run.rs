@@ -229,14 +229,16 @@ fn keys_to_events(
                             events.extend(char_events);
                         }
                         Key::Control(ctrl) => {
-                            match ctrl {
-                                ControlCode::HorizontalTabulation => {
-                                    events.push(shell_session.new_event(String::from("<TAB>")));
+                            if *raw_command {
+                                match ctrl {
+                                    ControlCode::HorizontalTabulation => {
+                                        events.push(shell_session.new_event(String::from("<TAB>")));
+                                    }
+                                    ControlCode::CarriageReturn => {
+                                        events.push(shell_session.new_event(String::from("<ENTER>\r\n")));
+                                    }
+                                    _ => {}
                                 }
-                                ControlCode::CarriageReturn => {
-                                    events.push(shell_session.new_event(String::from("<ENTER>\r\n")));
-                                }
-                                _ => {}
                             }
                         }
                         _ => {}
