@@ -201,7 +201,7 @@ fn keys_to_events(
         if let Some(e) = event {
             if !events.last().unwrap().data.contains("<ENTER>") {
                 events.push(e);
-                events.push(shell_session.new_event(format!("\r\n{}{} ", prompt, context.line)));
+                events.push(shell_session.new_event(format!("\r\n{}{}", prompt, context.line)));
             }
         }
         keys.progress.tick();
