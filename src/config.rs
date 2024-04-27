@@ -433,6 +433,7 @@ enum Instruction {
         keys: Vec<Key>,
         #[serde(default, with = "de::duration::option")]
         type_speed: Option<Duration>,
+        #[serde(default)]
         raw_command: bool,
     },
     Wait(#[serde(with = "de::duration")] Duration),

@@ -149,7 +149,7 @@ impl Instruction {
                 type_speed,
             } => {
                 command
-                    .send(shell_session, &mut context, raw_command)
+                    .send(shell_session, &mut context, &raw_command)
                     .wrap_err("could not send command to shell")?;
 
                 let type_speed = type_speed.map_or(default_type_speed, Into::into);
@@ -199,7 +199,7 @@ fn keys_to_events(
             return Ok(events);
         }
         if let Some(e) = event {
-            if !events.last().unwrap().data.contains("<ENTER>") {
+            if events.len() > 0 && !events.last().unwrap().data.contains("<ENTER>") {
                 events.push(e);
                 events.push(shell_session.new_event(format!("\r\n{}{}", prompt, context.line)));
             }
