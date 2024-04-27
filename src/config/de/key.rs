@@ -80,15 +80,19 @@ mod tests {
         let keys: Vec<Key> = serde_yaml::from_str(
             "
             - t
+            - unquoted-string
+            - 'quoted-string'
             - ^m
             - ^i
             - 1s
             ",
         )?;
         assert_eq!(keys[0], Key::Char('t'));
-        assert_eq!(keys[1], Key::Control(ControlCode::CarriageReturn));
-        assert_eq!(keys[2], Key::Control(ControlCode::HorizontalTabulation));
-        assert_eq!(keys[3], Key::Wait(Duration::from_secs(1)));
+        assert_eq!(keys[1], Key::CharSequence(String::from("unquoted-string")));
+        assert_eq!(keys[2], Key::CharSequence(String::from("quoted-string")));
+        assert_eq!(keys[3], Key::Control(ControlCode::CarriageReturn));
+        assert_eq!(keys[4], Key::Control(ControlCode::HorizontalTabulation));
+        assert_eq!(keys[5], Key::Wait(Duration::from_secs(1)));
         Ok(())
     }
 
