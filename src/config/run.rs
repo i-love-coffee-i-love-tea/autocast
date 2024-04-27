@@ -195,12 +195,14 @@ fn keys_to_events(
         let (event, has_prompt) = shell_session
             .read()
             .wrap_err("error reading shell output")?;
-        if let Some(e) = event {
-            events.push(e);
-            events.push(shell_session.new_event(format!("\r\n{}{} ", prompt, context.line)));
-        }
         if has_prompt {
             return Ok(events);
+        }
+        if let Some(e) = event {
+            if !events.last().unwrap().data.contains("<ENTER>") {
+                events.push(e);
+                events.push(shell_session.new_event(format!("\r\n{}{} ", prompt, context.line)));
+            }
         }
         keys.progress.tick();
         if Instant::now() >= next {
