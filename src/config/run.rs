@@ -116,7 +116,6 @@ impl Instruction {
     ) -> color_eyre::Result<Events<impl Iterator<Item = Event> + 'a, impl Iterator<Item = Event>>>
     {
         let mut context = CommandContext { line: String::from("") };
-
         match self {
             Self::Command {
                 command,
@@ -303,7 +302,7 @@ impl Command {
                     shell_session.send_line(line)
                 }
             }
-            Self::MultiLine(lines) => shell_session.send(&lines.join(" ")),
+            Self::MultiLine(lines) => shell_session.send_line(&lines.join(" ")),
             Self::Control(control) => shell_session.send(control),
         }
     }
