@@ -22,21 +22,25 @@ instructions:
   # demo
   - !Interactive
     command: 'testcli '
-    dont_execute: true
+    raw_command: true
     # submit command
     keys:
       # <TAB><TAB>
+      - 1s
       - ^i
       - ^i
-      - 2s
-      - 'var-expansion '
+      - 1s
+      #- 'var-expansion '
       - ' '
+      - 1s
       # <TAB><TAB>
       - ^i
       - ^i
-      - 2s
+      - 1s
       - ^m
 
+  - !Wait: 5s
+    
   # cleanup
   - !Command
     command: mv ~/.testcli.conf /tmp/

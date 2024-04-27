@@ -2,7 +2,6 @@ use std::{
     io, iter,
     time::{Duration, Instant},
 };
-use std::fmt::format;
 
 use color_eyre::eyre::Context;
 use expectrl::ControlCode;
@@ -12,6 +11,25 @@ use itertools::Itertools;
 use crate::asciicast::Event;
 
 use super::{spawn::ShellSession, Command, Instruction, Key};
+
+struct CommandContext {
+    line: String,
+}
+
+trait CommandLineHolder {
+    fn append_string(&mut self, characters: &str);
+    fn append_character(&mut self, c: &char);
+}
+
+impl CommandLineHolder for CommandContext {
+    fn append_string(&mut self, characters: &str) {
+        self.line += characters
+    }
+
+    fn append_character(&mut self, c: &char) {
+        self.line.push(*c)
+    }
+}
 
 pub(super) fn instructions<'a, I>(
     instructions: I,
@@ -97,6 +115,8 @@ impl Instruction {
         multi_progress: &MultiProgress,
     ) -> color_eyre::Result<Events<impl Iterator<Item = Event> + 'a, impl Iterator<Item = Event>>>
     {
+        let mut context = CommandContext { line: String::from("") };
+
         match self {
             Self::Command {
                 command,
@@ -104,7 +124,7 @@ impl Instruction {
                 type_speed,
             } => {
                 command
-                    .send(shell_session, &false)
+                    .send(shell_session, &mut context, &false)
                     .wrap_err("could not send command to shell")?;
                 let mut output = shell_session
                     .read_until_prompt()
@@ -124,16 +144,16 @@ impl Instruction {
             }
             Self::Interactive {
                 command,
-                dont_execute,
+                raw_command,
                 keys,
                 type_speed,
             } => {
                 command
-                    .send(shell_session, dont_execute)
+                    .send(shell_session, &mut context, raw_command)
                     .wrap_err("could not send command to shell")?;
 
                 let type_speed = type_speed.map_or(default_type_speed, Into::into);
-                let mut output = keys_to_events(keys, type_speed, shell_session, multi_progress, prompt)?;
+                let mut output = keys_to_events(keys, type_speed, shell_session, &mut context, multi_progress, prompt)?;
 
                 output.push(shell_session.new_event(String::from(prompt)));
                 let events = command
@@ -158,6 +178,7 @@ fn keys_to_events(
     keys: &[Key],
     type_speed: Duration,
     shell_session: &mut ShellSession,
+    context: &mut CommandContext,
     multi_progress: &MultiProgress,
     prompt: &str,
 ) -> color_eyre::Result<Vec<Event>> {
@@ -176,7 +197,7 @@ fn keys_to_events(
             .wrap_err("error reading shell output")?;
         if let Some(e) = event {
             events.push(e);
-            events.push(shell_session.new_event(format!("\r\n{}testcli ", prompt)));
+            events.push(shell_session.new_event(format!("\r\n{}{} ", prompt, context.line)));
         }
         if has_prompt {
             return Ok(events);
@@ -208,7 +229,7 @@ fn keys_to_events(
                     }
                     _ => {}
                 }
-                key.send(shell_session).wrap_err("error sending key")?;
+                key.send(shell_session, context).wrap_err("error sending key")?;
                 if let Key::Wait(wait) = key {
                     next += *wait;
                 }
@@ -269,11 +290,12 @@ impl<Co, Cl> Events<Co, Cl> {
 }
 
 impl Command {
-    fn send(&self, shell_session: &mut ShellSession, dont_execute: &bool) -> io::Result<()> {
+    fn send(&self, shell_session: &mut ShellSession, context: &mut CommandContext, raw_command: &bool) -> io::Result<()> {
         shell_session.reset();
         match self {
             Self::SingleLine(line) => {
-                if *dont_execute {
+                if *raw_command {
+                    context.append_string(line);
                     shell_session.send(line)
                 } else {
                     shell_session.send_line(line)
@@ -326,7 +348,7 @@ fn type_line(
 ) -> impl Iterator<Item = Event> {
     line.into_iter()
         .map(move |char| Event::output(type_speed, String::from(char)))
-    // TODO: should probably be done if dont_execute flag is false
+    // TODO: should probably be done if raw_command flag is false
     // .chain(iter::once(Event::outputln(type_speed)))
 }
 
@@ -363,11 +385,16 @@ where
 }
 
 impl Key {
-    fn send(&self, shell_session: &mut ShellSession) -> io::Result<()> {
+    fn send(&self, shell_session: &mut ShellSession, context: &mut CommandContext
+    ) -> io::Result<()> {
         match self {
-            Self::Char(char) => shell_session.send([*char as u8]),
-            Self::CharSequence(str) => {
-              shell_session.send(str)
+            Self::Char(char) => {
+                context.append_character(char);
+                shell_session.send([*char as u8])
+            },
+            Self::CharSequence(seq) => {
+                context.append_string(seq);
+                shell_session.send(seq)
             },
             Self::Control(control) => shell_session.send(control),
             Self::Wait(_) => Ok(()),
